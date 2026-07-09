@@ -1,0 +1,55 @@
+name: Build if_vxlan module
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-if-vxlan.yml"
+      - "BUILD.md"
+  pull_request:
+    paths:
+      - ".github/workflows/build-if-vxlan.yml"
+      - "BUILD.md"
+
+jobs:
+  build:
+    name: FreeBSD 15 amd64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build module
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "15.0"
+          usesh: true
+          sync: rsync
+          prepare: |
+            pkg install -y git
+          run: |
+            set -eu
+
+            src_commit="bf06074106cf80564e1137b0f6ad0eb923baca55"
+            src_dir="/tmp/freebsd-src"
+            artifact_dir="${GITHUB_WORKSPACE}/artifacts"
+
+            git clone --branch releng/15.0 --single-branch https://git.FreeBSD.org/src.git "${src_dir}"
+            git -C "${src_dir}" checkout "${src_commit}"
+
+            make -C "${src_dir}/sys/modules/if_vxlan"
+
+            mkdir -p "${artifact_dir}"
+            module_path="$(find /usr/obj -type f -name if_vxlan.ko -print -quit)"
+            test -n "${module_path}"
+            cp "${module_path}" "${artifact_dir}/if_vxlan.ko"
+
+            file "${artifact_dir}/if_vxlan.ko"
+
+      - name: Upload module artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: if_vxlan-freebsd15-amd64
+          path: artifacts/if_vxlan.ko
+          if-no-files-found: error
